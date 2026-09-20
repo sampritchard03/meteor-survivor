@@ -1,0 +1,7 @@
+{
+  "dependencies": {
+    "fs": "^0.0.1-security",
+    "minecraft-data": "^3.116.0",
+    "prismarine-recipe": "^1.5.0"
+  }
+}
