@@ -100,6 +100,35 @@ module.exports = (newData) => {
     setCopperNames("copper_golem_statue", false)
     setCopperNames("copper_golem_statue", true)
 
+
+    function reduceWoodRecipes(name) {
+        const recipe = newData[name].recipes[0]
+        for (let j = 0; j < recipe.ingredients.length; j++) {
+            const ingredient = recipe.ingredients[j]
+            if (
+                ingredient.validNames[0].includes("planks") ||
+                ingredient.validNames[0].includes("log") ||
+                ingredient.validNames[0].includes("wood") ||
+                ingredient.validNames[0].includes("slab")
+            ) {
+                for (let i = 1; i < newData[name].recipes.length; i++) {
+                    ingredient.validNames.push(newData[name].recipes[i].ingredients[j].validNames[0])
+                }
+            }
+        }
+
+        newData[name].recipes = [recipe]
+
+        console.log(name, newData[name].recipes)
+    }
+
+    reduceWoodRecipes("stick")
+    reduceWoodRecipes("crafting_table")
+    reduceWoodRecipes("wooden_axe")
+    reduceWoodRecipes("wooden_pickaxe")
+    reduceWoodRecipes("wooden_shovel")
+    reduceWoodRecipes("wooden_sword")
+
     var output = `package com.example.addon.item;
 
 import java.util.ArrayList;
@@ -165,7 +194,14 @@ public class ItemData {
 
             var hasLength1 = false;
             for (let ingredient of recipe.ingredients) {
-                output += "new Pair(List.of(Items."+getName(ingredient.name)+"), "+ingredient.count+"), "
+                output += "new Pair(List.of("
+                var hasLength2 = false;
+                for (let name of ingredient.validNames) {
+                    output += "Items."+getName(name)+", "
+                    hasLength2 = true
+                } 
+                if (hasLength2) output = output.slice(0, output.length-2)
+                output += "), "+ingredient.count+"), "
                 hasLength1 = true
             }
             if (hasLength1) output = output.slice(0, output.length-2)

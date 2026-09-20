@@ -21,6 +21,7 @@ import com.example.addon.packets.SpawnPacket;
 import com.example.addon.packets.TickPacket;
 import com.example.addon.tasks.Task;
 import com.example.addon.tasks.TaskSuppliers;
+import com.example.addon.tasks.compound.ClosestTask;
 import com.example.addon.tasks.entity.TargetEntityTask;
 import com.example.addon.tasks.inventory.CraftTask;
 import com.example.addon.tasks.item.ItemTask;
@@ -36,8 +37,10 @@ import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.orbit.EventHandler;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
+import net.minecraft.network.protocol.game.ServerboundSetCarriedItemPacket;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Inventory;
+import net.minecraft.world.inventory.ContainerInput;
 import net.minecraft.world.inventory.CraftingMenu;
 import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.Item;
@@ -50,15 +53,56 @@ import net.minecraft.world.phys.Vec3;
 public class Bot extends Module {
 	private final SettingGroup sgGeneral = settings.getDefaultGroup();
 
-	private final Setting<Integer> example = sgGeneral.add(new IntSetting.Builder()
-		.name("dirt amount")
-		.description("Amount of dirt to mine.")
+	private final Setting<Integer> logs = sgGeneral.add(new IntSetting.Builder()
+		.name("logs amount")
+		.description("Amount of logs to get.")
 		.defaultValue(0)
 		.range(0, 256)
         .sliderMax(256)
         .sliderMin(0)
 		.build()
 	);
+
+    private final Setting<Integer> planks = sgGeneral.add(new IntSetting.Builder()
+		.name("planks amount")
+		.description("Amount of planks to get.")
+		.defaultValue(0)
+		.range(0, 256)
+        .sliderMax(256)
+        .sliderMin(0)
+		.build()
+	);
+
+    private final Setting<Integer> tables = sgGeneral.add(new IntSetting.Builder()
+		.name("tables amount")
+		.description("Amount of tables to get.")
+		.defaultValue(0)
+		.range(0, 256)
+        .sliderMax(256)
+        .sliderMin(0)
+		.build()
+	);
+
+    private final Setting<Integer> sticks = sgGeneral.add(new IntSetting.Builder()
+		.name("sticks amount")
+		.description("Amount of sticks to get.")
+		.defaultValue(0)
+		.range(0, 256)
+        .sliderMax(256)
+        .sliderMin(0)
+		.build()
+	);
+
+    private final Setting<Integer> tools = sgGeneral.add(new IntSetting.Builder()
+		.name("tools amount")
+		.description("Amount of tools to get.")
+		.defaultValue(0)
+		.range(0, 256)
+        .sliderMax(256)
+        .sliderMin(0)
+		.build()
+	);
+
     //public final Inventory inventory = new Inventory();
 
 	private double x; private double y; private double z;
@@ -86,13 +130,14 @@ public class Bot extends Module {
 		super(AddonTemplate.BOTCATEGORY, "bot", "Pathfinds to the configured coordinates with Baritone.");
 		inventory = new Inventory();
 
+        
 	}
 
 	public void mcTick() {
 		double nx = mc.player.getX(), ny = mc.player.getY(), nz = mc.player.getZ();
         dx = nx - x; dy = ny - y; dz = nz - z;
 		x = nx; y = ny; z = nz;
-		ix = (int)x; iy = (int)y; iz = (int)z;
+		ix = (int)Math.floor(x); iy = (int)Math.floor(y); iz = (int)Math.floor(z);
     }
 
 	private void findEntityTargets() {
@@ -117,8 +162,6 @@ public class Bot extends Module {
                     closestDistancePerTask.put(task, distance);
                     closestPerTask.put(task, entity);
                 }
-
-                break;
             }
         }
 
@@ -136,9 +179,9 @@ public class Bot extends Module {
         Map<TargetBlockTask, Double> closestDistancePerTask = new HashMap<>();
 
         for (BlockPos pos : BlockPos.betweenClosed(
-                origin.offset(-16, -16, -16),
-                origin.offset(16, 16, 16))
-		) {
+                origin.offset(-25, -25, -25),
+                origin.offset(25, 25, 25)
+        )) {
 			Block block = mod.mc.level.getBlockState(pos).getBlock();
 			double distance = pos.distSqr(origin);
 
@@ -151,8 +194,6 @@ public class Bot extends Module {
 					closestDistancePerTask.put(task, distance);
 					closestPerTask.put(task, pos.immutable());
 				}
-
-				break;
             }
         }
 
@@ -167,21 +208,31 @@ public class Bot extends Module {
 
 	@Override
 	public void onActivate() {
-		mainTask = ItemTasks.OAK_PLANKS.get(() -> example.get());
+		if (mainTask == null) mainTask = new ClosestTask("myTasks", List.of(
+            ItemTasks.LOGS.get(() -> logs.get()),
+            ItemTasks.PLANKS.get(() -> planks.get()),
+            ItemTasks.CRAFTING_TABLE.get(() -> tables.get()),
+            ItemTasks.STICK.get(() -> sticks.get()),
+            ItemTasks.WOODEN_AXE.get(() -> tools.get()),
+            ItemTasks.WOODEN_PICKAXE.get(() -> tools.get()),
+            ItemTasks.WOODEN_SHOVEL.get(() -> tools.get()),
+            ItemTasks.WOODEN_SWORD.get(() -> tools.get())
+        ));
 	}
 
 	@Override
 	public void onDeactivate() {
-		mainTask = null;
+        mainTask.stop();
 	}
 	
     @EventHandler
     private void onPlayerTick(TickEvent.Post event) {
+        mod.log(""+Task.numberOfTasks);
         mcTick();
 		mod.b.getInputOverrideHandler().clearAllKeys();
+        findEntityTargets();
 		if (t % 10 == 0) {
 			findBlockTargets();
-			findEntityTargets();
 			mainTask.trySearch(); 
 		}
         if (!mainTask.isFinished()) {
@@ -216,6 +267,33 @@ public class Bot extends Module {
                     return false;
             }
             return true;
+        }
+
+        // selects the item in the hotbar, swapping it in from the main inventory first if needed
+        public boolean equip(Item item) {
+            if (mc.player == null) return false;
+            net.minecraft.world.entity.player.Inventory playerInventory = mc.player.getInventory();
+
+            if (playerInventory.getSelectedItem().is(item)) return true;
+
+            for (int slot = 0; slot < playerInventory.getContainerSize(); slot++) {
+                if (!playerInventory.getItem(slot).is(item)) continue;
+
+                if (net.minecraft.world.entity.player.Inventory.isHotbarSlot(slot)) {
+                    selectHotbarSlot(slot);
+                } else {
+                    int hotbarSlot = playerInventory.getSelectedSlot();
+                    mc.gameMode.handleContainerInput(mc.player.inventoryMenu.containerId, slot, hotbarSlot, ContainerInput.SWAP, mc.player);
+                    selectHotbarSlot(hotbarSlot);
+                }
+                return true;
+            }
+            return false;
+        }
+
+        private void selectHotbarSlot(int hotbarSlot) {
+            mc.player.getInventory().setSelectedSlot(hotbarSlot);
+            mc.player.connection.send(new ServerboundSetCarriedItemPacket(hotbarSlot));
         }
 
         // returns the fastest tool (or empty hand) for breaking the given block state

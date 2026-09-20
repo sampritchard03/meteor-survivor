@@ -1,8 +1,10 @@
 package com.example.addon.tasks.item;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.Predicate;
 
 import com.example.addon.mod;
@@ -35,11 +37,22 @@ public abstract class ItemTask extends Task {
     public final CraftTask craft;
 
     public ItemTask(List<Item> _item) {
+        this(_item, Set.of());
+    }
+
+    // ancestors tracks items already being crafted higher up the chain, so self-referencing
+    // recipes (e.g. tool/armor repair, which use the item itself as an ingredient) terminate
+    protected ItemTask(List<Item> _item, Set<Item> ancestors) {
         super("item");
 
         items = _item;
         
         collectBlocks = new CollectBlocksTask(items);
+
+        if (items.stream().anyMatch(ancestors::contains)) {
+            craft = null;
+            return;
+        }
 
         List<Recipe> recipes = new ArrayList<>();
 
@@ -51,14 +64,19 @@ public abstract class ItemTask extends Task {
 
         if (!recipes.stream().anyMatch(r -> !r.ingredients.isEmpty())) craft = null;
 
-        else craft = new CraftTask(recipes) {
+        else {
+            Set<Item> nextAncestors = new HashSet<>(ancestors);
+            nextAncestors.addAll(items);
 
-            @Override
-            public int getCount() {
-                return ItemTask.this.getCount();
-            }
-            
-        };
+            craft = new CraftTask(recipes, nextAncestors) {
+
+                @Override
+                public int getCount() {
+                    return ItemTask.this.getCount();
+                }
+
+            };
+        }
     }
 
     abstract public int getCount();
@@ -81,19 +99,21 @@ public abstract class ItemTask extends Task {
     @Override
     public Task onTick() {
         if (collectBlocks.shouldContinue()) return collectBlocks;
-        if (craft != null && craft.canCraft() && craft.shouldContinue()) return craft;
-
-        mod.log(""+!collectBlocks.isFinished()+", "+(craft == null ? "null" : craft.canCraft()+", "+!craft.isFinished()));
+        if (craft != null && craft.shouldContinue()) return craft;
 
         if (!collectBlocks.isFinished()) return collectBlocks;
-        if (craft != null && craft.canCraft() && !craft.isFinished()) return craft;
+        if (craft != null && !craft.isFinished()) return craft;
         
         return null;
     }
 
     @Override
     public int timeEstimate() {
-        return collectBlocks.timeEstimate();
+        if (collectBlocks.shouldContinue()) return collectBlocks.timeEstimate();
+        if (craft != null && craft.shouldContinue()) return craft.timeEstimate();
+        if (!collectBlocks.isFinished()) return collectBlocks.timeEstimate();
+        if (craft != null && !craft.isFinished()) return craft.timeEstimate();
+        return Integer.MAX_VALUE;
     }
 
     @Override

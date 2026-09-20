@@ -12,6 +12,7 @@ public abstract class Task {
     public abstract void onStop();
     public abstract boolean isEqual(Task o);
     public abstract String debugInfo();
+    public static int numberOfTasks;
     
 
     private Task sub = null;
@@ -22,6 +23,7 @@ public abstract class Task {
 
     public Task(String _name) {
         name = _name;
+        numberOfTasks++;
     }
 
     public void trySearch() {if (shouldSearch()) search();}

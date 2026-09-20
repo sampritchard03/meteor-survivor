@@ -17,6 +17,7 @@ import com.example.addon.utils.PathUtils;
 
 import baritone.api.pathing.goals.Goal;
 import baritone.api.pathing.goals.GoalGetToBlock;
+import baritone.api.pathing.goals.GoalNear;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.item.Item;
@@ -30,7 +31,7 @@ public class CollectBlocksTask extends TargetBlockTask {
     public final PathfindTask pathfind;
     public final DigPosTask digPos;
     public final CollectItemsTask collectItems;
-    private GoalGetToBlock goal;
+    private GoalNear goal;
     private final List<Item> items;
 
     protected boolean isRequestedItem(ItemStack stack) {
@@ -95,11 +96,10 @@ public class CollectBlocksTask extends TargetBlockTask {
     public Task onTick() {
         if (!collectItems.isFinished()) return collectItems;
         if (targetPos == null) return null;
-        if (mod.bot.isWithinRange(targetPos, 4) && !digPos.isFinished()) {
-            ItemData.Data blockData = ItemData.allData.get(mod.mc.level.getBlockState(targetPos).getBlock().asItem());
+        if (mod.bot.isWithinRange(targetPos, 4.5) && !digPos.isFinished()) {
             return digPos;
         }
-        if (goal == null || !goal.getGoalPos().equals(targetPos)) goal = new GoalGetToBlock(targetPos);
+        if (goal == null || !goal.getGoalPos().equals(targetPos)) goal = new GoalNear(targetPos, 2);
         if (!pathfind.isFinished()) return pathfind;
         return null;
     }
@@ -118,7 +118,7 @@ public class CollectBlocksTask extends TargetBlockTask {
     }
 
     @Override
-    public void onStop() {goal = null;}
+    public void onStop() {goal = null; targetPos = null;}
 
     @Override
     public boolean isEqual(Task o) {

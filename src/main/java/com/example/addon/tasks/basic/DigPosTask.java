@@ -17,7 +17,11 @@ public abstract class DigPosTask extends Task {
     public final LookAtTask lookAtTask;
 
     public DigPosTask() {
-        super("digPos");
+        this("digPos");
+    }
+
+    public DigPosTask(String name) {
+        super(name);
         lookAtTask = new LookAtTask() {
 
             @Override
@@ -33,7 +37,7 @@ public abstract class DigPosTask extends Task {
         };
     }
 
-    private void setHoldingMouseLeft(boolean holding) {mod.b.getInputOverrideHandler().setInputForceState(Input.CLICK_LEFT, holding);}
+    protected void setHoldingMouse(boolean holding) {mod.b.getInputOverrideHandler().setInputForceState(Input.CLICK_LEFT, holding);}
 
     abstract public BlockPos targetPos();
 
@@ -48,11 +52,15 @@ public abstract class DigPosTask extends Task {
 
     @Override
     public Task onTick() {
+        if (!(this instanceof PlaceBlockTask)) 
+            mod.bot.inventory.equip(mod.bot.inventory.getBestTool(mod.mc.level.getBlockState(targetPos())).getItem());
+
         if (!lookAtTask.isFinished()) {
             return lookAtTask;
         }
 
-        setHoldingMouseLeft(true);
+        setHoldingMouse(true);
+        
         return null;
     }
 
@@ -89,12 +97,12 @@ public abstract class DigPosTask extends Task {
 
     @Override
     public void onStop() {
-        setHoldingMouseLeft(false);
+        setHoldingMouse(false);
     }
 
     @Override
     public boolean isEqual(Task o) {
-        return o instanceof DigPosTask;
+        return false;
     }
 
     @Override

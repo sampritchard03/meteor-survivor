@@ -1,39 +1,74 @@
 package com.example.addon.tasks.compound;
 
 import java.util.List;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.function.Function;
-import java.util.function.Supplier;
 
+import com.example.addon.mod;
 import com.example.addon.tasks.Task;
 
-public interface ClosestTask {
+public class ClosestTask extends Task implements IClosestTask {
+    public final List<Task> tasks;
+    private Task closest;
 
-    List<Task> getTasks();
+    public ClosestTask(String _name, List<Task> _tasks) {
+        super(_name);
+        tasks = _tasks;
+    }
 
-    default Task getClosest() {
+    @Override
+    public List<Task> getTasks() {
+        return tasks;
+    }
 
-        Function<Boolean, Task> get = (b) -> {
-            int lowestTime = Integer.MAX_VALUE;
-            Task fastestTask = null;
+    @Override
+    public void onStart() {closest = getClosest();}
+    @Override
+    public boolean shouldSearch() {return false;}
 
-            for (Task task : getTasks()) {
-                if (b ? !task.shouldContinue() : task.isFinished()) continue;
-                int time = task.timeEstimate();
-                if (time < lowestTime) {
-                    lowestTime = time;
-                    fastestTask = task;
-                }
-            }
-            return fastestTask;
-        };
+    @Override
+    public void search() {
+        if (closest == null) return;
+        if (closest.shouldSearch()) closest.search();
+    }
 
-        Task ret = get.apply(false);
-        if (ret == null) {
-            ret = get.apply(true);
-        }
-        
-        return ret;
+    @Override
+    public Task onTick() {
+        closest = getClosest();
+        mod.log(""+closest.toString());
+        return closest;
+    }
+
+    @Override
+    public int timeEstimate() {
+        if (closest == null) return Integer.MAX_VALUE;
+        return closest.timeEstimate();
+    }
+
+    @Override
+    public int priority() {
+        if (closest == null) return Integer.MIN_VALUE;
+        return closest.priority();
+    }
+
+    @Override
+    public boolean isFinished() {
+        closest = getClosest();
+        if (closest == null) return true;
+        return closest.isFinished();
+    }
+
+    @Override
+    public void onStop() {
+        closest = null;
+    }
+
+    @Override
+    public boolean isEqual(Task o) {
+        return false;
+    }
+
+    @Override
+    public String debugInfo() {
+        return "";
     }
     
 }

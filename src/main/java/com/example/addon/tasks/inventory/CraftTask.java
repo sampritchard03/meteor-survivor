@@ -2,6 +2,7 @@ package com.example.addon.tasks.inventory;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 
@@ -13,8 +14,10 @@ import com.example.addon.modules.Bot;
 import com.example.addon.tasks.Priority;
 import com.example.addon.tasks.Task;
 import com.example.addon.tasks.basic.PathfindTask;
-import com.example.addon.tasks.compound.ClosestTask;
+import com.example.addon.tasks.basic.PlaceBlockTask;
+import com.example.addon.tasks.compound.IClosestTask;
 import com.example.addon.tasks.item.ItemTask;
+import com.example.addon.tasks.item.ItemTasks;
 import com.example.addon.tasks.world.TargetBlockTask;
 import com.example.addon.utils.Pair;
 
@@ -35,6 +38,7 @@ import net.minecraft.world.inventory.InventoryMenu;
 import net.minecraft.world.inventory.RecipeBookMenu;
 import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.Item;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.item.crafting.Ingredient;
 import net.minecraft.world.item.crafting.display.RecipeDisplayEntry;
 import net.minecraft.world.item.crafting.display.SlotDisplayContext;
@@ -46,39 +50,44 @@ import net.minecraft.core.Holder;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.phys.Vec3;
 
-public abstract class CraftTask extends TargetBlockTask implements ClosestTask {
+public abstract class CraftTask extends TargetBlockTask {
     public final List<Recipe> recipes;
-    public final List<Task> ingredientTasks;
     public final PathfindTask pathfind;
+    public final PlaceBlockTask placeBlock;
     private GoalGetToBlock goal;
     private int nextActionTick;
+    private BlockPos placeCraftingTableAt;
 
     public CraftTask(List<Recipe> _recipes) {
+        this(_recipes, Set.of());
+    }
+
+    protected CraftTask(List<Recipe> _recipes, Set<Item> ancestors) {
         super("craft");
         recipes = _recipes;
-        ingredientTasks = new ArrayList<>();
-        for (Recipe recipe : recipes) {
-            for (int i = 0; i < recipe.ingredients.size(); i++) {
-                Pair<List<Item>, Integer> ingredient = recipe.ingredients.get(i);
-                ingredientTasks.add(new ItemTask(ingredient.left) {
-
-                    @Override
-                    public int getCount() {
-                        int produced = mod.bot.inventory.getCount(stack -> stack.is(recipe.result));
-                        int remaining = Math.max(0, CraftTask.this.getCount() - produced);
-                        int craftsRequired = (remaining + recipe.resultCount - 1) / recipe.resultCount;
-                        return craftsRequired * ingredient.right;
-                    }
-                    
-                });
-            }
-        }
         pathfind = new PathfindTask() {
             @Override
             public Goal getGoal() {
                 return goal;
             }
         };
+        if (recipes.stream().anyMatch(recipe -> recipe.requiresTable)) {
+            placeBlock = new PlaceBlockTask() {
+
+                @Override
+                public Item toPlace() {
+                    return Items.CRAFTING_TABLE;
+                }
+
+                @Override
+                public BlockPos targetPos() {
+                    return placeCraftingTableAt;
+                }
+                
+            };
+        } else {
+            placeBlock = null;
+        }
     }
 
     abstract public int getCount();
@@ -95,8 +104,9 @@ public abstract class CraftTask extends TargetBlockTask implements ClosestTask {
                 .orElse(null);
     }
 
-    @Override 
-    public List<Task> getTasks() {return ingredientTasks;}
+    private boolean hasCraftingTable() {
+        return mod.bot.inventory.getCount((i) -> i.getItem() == Items.CRAFTING_TABLE) >= 1;
+    }
 
     @Override
     public void onStart() {}
@@ -110,10 +120,8 @@ public abstract class CraftTask extends TargetBlockTask implements ClosestTask {
     @Override
     public Task onTick() {
         if (mod.mc.player == null || mod.mc.level == null || mod.mc.gameMode == null) return null;
-        if (!canCraft()) return null;
 
-        Task closest = getClosest();
-        if (closest != null) return closest;
+        if (!canCraft()) return null;
 
         Recipe theRecipe = getCraftableRecipe();
 
@@ -121,7 +129,13 @@ public abstract class CraftTask extends TargetBlockTask implements ClosestTask {
 
         if (theRecipe.requiresTable) {
             if (!(mod.mc.player.containerMenu instanceof CraftingMenu _menu)) {
-                if (targetPos == null) return null;
+                if (targetPos == null) {
+                    if (!hasCraftingTable()) return null;
+                    if (placeCraftingTableAt == null) placeCraftingTableAt = mod.bot.blockPos().offset(0, -1, 0);
+                    if (!placeBlock.isFinished()) return placeBlock;
+                    return null;
+                };
+                placeCraftingTableAt = null;
                 if (!mod.bot.isWithinRange(targetPos, 4)) {
                     if (goal == null || !goal.getGoalPos().equals(targetPos)) goal = new GoalGetToBlock(targetPos);
                     return pathfind;
@@ -138,7 +152,8 @@ public abstract class CraftTask extends TargetBlockTask implements ClosestTask {
                 menu = _menu;
 
         } else {
-            if (!(mod.mc.player.containerMenu instanceof InventoryMenu)) {
+            if (mod.mc.player.containerMenu instanceof CraftingMenu _menu) menu = _menu;
+            else if (!(mod.mc.player.containerMenu instanceof InventoryMenu)) {
                 mod.mc.player.sendOpenInventory();
                 return null;
             } else
@@ -180,7 +195,18 @@ public abstract class CraftTask extends TargetBlockTask implements ClosestTask {
 
     @Override
     public int timeEstimate() {
-        return pathfind.isFinished() ? 10 : pathfind.timeEstimate() + 10;
+        if (mod.mc.player == null || mod.mc.level == null || mod.mc.gameMode == null) return Integer.MAX_VALUE;
+
+        if (!canCraft()) return Integer.MAX_VALUE;
+
+        Recipe theRecipe = getCraftableRecipe();
+
+        if (theRecipe.requiresTable && !(mod.mc.player.containerMenu instanceof CraftingMenu)) {
+            if (targetPos == null) return hasCraftingTable() ? placeBlock.timeEstimate() : Integer.MAX_VALUE;
+            if (!mod.bot.isWithinRange(targetPos, 4)) return pathfind.timeEstimate();
+        }
+
+        return 10;
     }
 
     @Override

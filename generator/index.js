@@ -39,7 +39,7 @@ for (let type in data.items) {
         for (let item of recipe.delta) {
             if (item.count < 0)
                 ingredients.push({
-                    name: data.items[item.id].name,
+                    validNames: [data.items[item.id].name],
                     count: -item.count
                 })
         }
@@ -49,10 +49,5 @@ for (let type in data.items) {
 }
 
 blockDrops(newData)
-
-var x = 1
-var y = x
-x++
-
-const x = myFunction()
-//x=1
+//x = 2
+//y() = 2

@@ -67,7 +67,7 @@ public abstract class CollectItemsTask extends TargetEntityTask {
     @Override
     public Task onTick() {
         if (targetEntity == null) return null;
-        if (mod.bot.isWithinRange(targetEntity.blockPosition(), 2)) {
+        if (mod.bot.isWithinRange(targetEntity.blockPosition(), 3)) {
             mod.b.getInputOverrideHandler().setInputForceState(Input.MOVE_FORWARD, true);
             if (targetEntity.getBlockY() > mod.bot.iy())
                 mod.b.getInputOverrideHandler().setInputForceState(Input.JUMP, true);

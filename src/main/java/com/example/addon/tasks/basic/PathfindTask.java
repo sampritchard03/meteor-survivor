@@ -49,7 +49,7 @@ public abstract class PathfindTask extends Task {
     @Override
     public int timeEstimate() {
         double len = PathUtils.pathLength(getGoal());
-        if (len == Double.MAX_VALUE) return Integer.MAX_VALUE;
+        if (len >= Double.MAX_VALUE) return Integer.MAX_VALUE;
         return (int)(Math.max(0, len) / 0.07);
     }
 

@@ -58,7 +58,16 @@ public abstract class LookAtTask extends Task {
 
     @Override
     public int timeEstimate() {
-        return 0;
+        Vec2 targetRot = getRot();
+        float delta = Math.max(
+                Math.abs(Mth.wrapDegrees(targetRot.x - mc.player.getXRot())),
+                Math.abs(Mth.wrapDegrees(targetRot.y - mc.player.getYRot())));
+
+        float amount = Mth.clamp((float) getSpeed(), 0.01F, 1.0F);
+        if (delta <= 1) return 0;
+
+        // ticks for exponential turn convergence (delta shrinks by (1 - amount) each tick) to reach 1 degree
+        return (int) Math.ceil(Math.log(1 / delta) / Math.log(1 - amount));
     }
 
     @Override
@@ -71,7 +80,7 @@ public abstract class LookAtTask extends Task {
         Vec2 targetRot = getRot();
         float pitchDelta = Mth.wrapDegrees(targetRot.x - mc.player.getXRot());
         float yawDelta = Mth.wrapDegrees(targetRot.y - mc.player.getYRot());
-        return Math.abs(pitchDelta) < 1 && Math.abs(yawDelta) < 10;
+        return Math.abs(pitchDelta) < 10 && Math.abs(yawDelta) < 10;
     }
 
     @Override
